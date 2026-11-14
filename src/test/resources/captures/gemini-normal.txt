@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"text": "I am a large language model, trained by Google."}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 7,"candidatesTokenCount": 11,"totalTokenCount": 18,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 7}],"serviceTier": "standard"},"modelVersion": "gemini-3.1-flash-lite","responseId": "KXbyatuwB5ul_PUPsoaKuAk"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "EnMKcQFpFH0TMKBLneg/GGGds9TK8wj0mWn8HCznhTDZnJlHrCmSESD36efUjYERhjSHxkYdW8GFYFatbxemzszzwcFBKLAafU1l1GmU9PRdhH+kjVGL8Lfav9AT0c+n4lnl7G4Tu6GhUBQsnlyU/JNkvN0F"}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 7,"candidatesTokenCount": 11,"totalTokenCount": 18,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 7}],"serviceTier": "standard"},"modelVersion": "gemini-3.1-flash-lite","responseId": "KXbyatuwB5ul_PUPsoaKuAk"}
+

@@ -1,0 +1,14 @@
+HTTP/1.1 400 Bad Request
+Vary: Origin
+Vary: X-Origin
+Vary: Referer
+Content-Type: text/event-stream
+Date: Tue, 10 Nov 2026 02:09:59 GMT
+Server: scaffolding on HTTPServer2
+Content-Length: 581
+X-XSS-Protection: 0
+X-Frame-Options: SAMEORIGIN
+X-Content-Type-Options: nosniff
+Server-Timing: gfet4t7; dur=60
+Alt-Svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+

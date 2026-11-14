@@ -1,0 +1,62 @@
+[{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "I"
+          }
+        ],
+        "role": "model"
+      },
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7,
+    "candidatesTokenCount": 1,
+    "totalTokenCount": 8,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7
+      }
+    ],
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.1-flash-lite",
+  "responseId": "63ryaoubKq7FjMcPkpCd2Q4"
+}
+,
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "",
+            "thoughtSignature": "EnMKcQFpFH0TTatuueW3B2wePZzeYYbuHLmCFe0SnKLcK2pI2wteXz5QAGlB5lHPSPBgOl5ObmZW4xKP6fQIPTb0kOOXW7/LyrCECXd8VFVPS/2jz+eskACKYpG88VWYTq5JNYw8gEcYakuU9gaaLgCQuQQk"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "MAX_TOKENS",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7,
+    "candidatesTokenCount": 1,
+    "totalTokenCount": 8,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7
+      }
+    ],
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.1-flash-lite",
+  "responseId": "63ryaoubKq7FjMcPkpCd2Q4"
+}
+]

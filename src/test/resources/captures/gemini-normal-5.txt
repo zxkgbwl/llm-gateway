@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"text": "I"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 7,"candidatesTokenCount": 1,"totalTokenCount": 8,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 7}],"serviceTier": "standard"},"modelVersion": "gemini-3.1-flash-lite","responseId": "JoLzaq_zFaPM_PUPpeqf0Ag"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "EnMKcQFpFH0Ta1zpx6xbFHWJEpSmZzsfRseOjFoatLk2ge5n+p7bJ0jI7JlmsYuioYy78LJcnQXNsgoGEAwD/JzWTEZlxZ3C0ZCl6OHbJ9XU5pHSPTungQJZewI+Te8sdx0ASrlZzYoQ2pMgQnS5dNqVZEUR"}],"role": "model"},"finishReason": "MAX_TOKENS","index": 0}],"usageMetadata": {"promptTokenCount": 7,"candidatesTokenCount": 1,"totalTokenCount": 8,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 7}],"serviceTier": "standard"},"modelVersion": "gemini-3.1-flash-lite","responseId": "JoLzaq_zFaPM_PUPpeqf0Ag"}
+

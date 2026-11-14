@@ -1,0 +1,6 @@
+{
+  "model": "claude-haiku-5-5",
+  "stream": true,
+  "max_tokens": 5,
+  "messages": [{ "role": "user", "content": "Introduce yourself in one sentence." }]
+}
