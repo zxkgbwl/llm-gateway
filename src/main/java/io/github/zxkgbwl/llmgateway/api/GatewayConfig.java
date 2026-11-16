@@ -6,16 +6,24 @@ import io.github.zxkgbwl.llmgateway.provider.AnthropicAdapter;
 import io.github.zxkgbwl.llmgateway.provider.GeminiAdapter;
 import io.github.zxkgbwl.llmgateway.provider.ProtocolAdapter;
 import io.github.zxkgbwl.llmgateway.provider.StreamingClient;
+import io.github.zxkgbwl.llmgateway.quota.QuotaSettler;
+import io.github.zxkgbwl.llmgateway.quota.RedisTpmLimiter;
+import io.github.zxkgbwl.llmgateway.quota.TpmLimiter;
 import io.github.zxkgbwl.llmgateway.sse.SseDecoder;
+import io.github.zxkgbwl.llmgateway.tenant.ApiKeyFilter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
+import io.github.zxkgbwl.llmgateway.tenant.TenantProperties;
+import io.github.zxkgbwl.llmgateway.tenant.TenantRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,7 +32,29 @@ import java.util.Map;
  * 组件装配：所有依赖在构造时注入。API Key 从环境变量读取。
  */
 @Configuration
+@EnableConfigurationProperties(TenantProperties.class)
 public class GatewayConfig {
+    @Bean
+    public TenantRegistry tenantRegistry(TenantProperties tenantProperties) {
+        return new TenantRegistry(tenantProperties.tenants());
+    }
+
+    @Bean
+    public ApiKeyFilter apiKeyFilter(TenantRegistry registry) {
+        return new ApiKeyFilter(registry);
+    }
+
+    @Bean
+    public TpmLimiter tpmLimiter(ReactiveStringRedisTemplate redis) {
+        return new RedisTpmLimiter(redis);
+    }
+
+    @Bean
+    public QuotaSettler quotaSettler(TpmLimiter limiter) {
+        return new QuotaSettler(limiter);
+    }
+
+
 
     @Bean
     public StreamingClient streamingClient(WebClient.Builder builder) {

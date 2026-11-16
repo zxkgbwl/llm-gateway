@@ -5,3 +5,22 @@ server:
 logging:
   level:
     reactor.netty.http.client: info
+  file:
+    name: logs/gateway.log
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+
+
+gateway:
+  quota:
+    input_factor: 1.3
+
+  tenants:
+    - id: demo
+      key-sha256: 77803c1349e3b4c86c9f685ebcc776a64c9e1850bcf2bdd1dac7857140e90849   # vk-demo-123
+      tpm: 10000
+      default-max-tokens: 1024

@@ -43,6 +43,7 @@ public class LoadClient {
                 .flatMap(i -> client.post()
                         .uri("http://localhost:8080/v1/chat/completions")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer vk-demo-123")
                         .bodyValue(body)
                         .retrieve()
                         .bodyToFlux(String.class)

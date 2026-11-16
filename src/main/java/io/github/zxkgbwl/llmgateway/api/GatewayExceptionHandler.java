@@ -3,6 +3,7 @@ package io.github.zxkgbwl.llmgateway.api;
 // import 按实际包路径调整
 
 import io.github.zxkgbwl.llmgateway.provider.UpstreamHttpException;
+import io.github.zxkgbwl.llmgateway.quota.QuotaExceededException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -30,5 +31,17 @@ public class GatewayExceptionHandler {
         return builder.body(Map.of("error", Map.of(
                 "message", e.getMessage(),
                 "type", "upstream_error")));
+    }
+
+    /** 网关自己的 TPM 限流。type 和上游 429 的 upstream_error 区分开，客户端能看出是谁限的流 */
+    @ExceptionHandler(QuotaExceededException.class)
+    public ResponseEntity<Map<String, Object>> quota(QuotaExceededException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(e.retryAfterSeconds()))
+                .header("x-ratelimit-remaining-tokens", String.valueOf(Math.max(0, e.remainingTokens())))
+                .body(Map.of("error", Map.of(
+                        "message", e.getMessage(),
+                        "type", "gateway_rate_limit",
+                        "code", "tpm_exceeded")));
     }
 }
