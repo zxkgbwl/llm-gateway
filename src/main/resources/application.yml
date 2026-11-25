@@ -17,10 +17,33 @@ spring:
 
 gateway:
   quota:
-    input_factor: 1.3
+    input-factor: 1.3
 
   tenants:
     - id: demo
       key-sha256: 77803c1349e3b4c86c9f685ebcc776a64c9e1850bcf2bdd1dac7857140e90849   # vk-demo-123
       tpm: 10000
       default-max-tokens: 1024
+  failover:
+    first-byte-budget-seconds: 15      # 首字节前总预算，重试和切换共用
+    default-cooldown-seconds: 30       # 上游 429 没带 Retry-After 时的冷却时长
+
+  timeouts:
+    connect-ms: 3000                   # TCP 建连超时
+    idle-seconds: 30                   # 首字节后，相邻两次收到上游原始字节的最大间隔
+    first-token-seconds: 60            # 请求开始到第一个 TextDelta；必须大于 first-byte-budget-seconds
+
+
+  # 模型别名 → 有序候选列表；provider 取 providerName()：gemini / anthropic / ollama
+  # 不在这里的模型名照旧按前缀（gemini- / claude-）直连单个厂商
+  models:
+    flash:
+      - provider: gemini
+        model: gemini-3.1-flash-lite
+      - provider: anthropic
+        model: claude-haiku-5-5
+      - provider: ollama         # 降级层：云端都不可用时用本地小模型兜底，同样计入 TPM
+        model: qwen2.5:0.5b
+
+  ollama:
+    base-url: http://localhost:11434/v1

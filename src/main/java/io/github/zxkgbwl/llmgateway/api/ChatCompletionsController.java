@@ -2,8 +2,7 @@ package io.github.zxkgbwl.llmgateway.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.zxkgbwl.llmgateway.common.ChatRequest;
-import io.github.zxkgbwl.llmgateway.provider.ProtocolAdapter;
-import io.github.zxkgbwl.llmgateway.provider.StreamingClient;
+import io.github.zxkgbwl.llmgateway.provider.*;
 import io.github.zxkgbwl.llmgateway.quota.QuotaSettler;
 import io.github.zxkgbwl.llmgateway.tenant.Tenant;
 import org.slf4j.Logger;
@@ -19,26 +18,36 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 
+import java.time.Duration;
 import java.util.List;
 
 @RestController
 public class ChatCompletionsController {
     private static final Logger log = LoggerFactory.getLogger(ChatCompletionsController.class);
 
-    private final StreamingClient client;
+    private final FailoverClient client;
     private final ProviderRouter router;
     private final ObjectMapper json;
     private final QuotaSettler settler;
     private final double inputFactor;
+    private final Duration firstTokenTimeout;
 
-    public ChatCompletionsController(StreamingClient client, ProviderRouter router,  ObjectMapper json,
+    public ChatCompletionsController(FailoverClient client, ProviderRouter router,  ObjectMapper json,
                                      QuotaSettler settler,
-                                     @Value("${gateway.quota.input-factor: 1.3}") double inputFactor) {
+                                     @Value("${gateway.quota.input-factor: 1.3}") double inputFactor,
+                                     @Value("${gateway.timeouts.first-token-seconds:60}") long firstTokenSeconds,
+                                     @Value("${gateway.failover.first-byte-budget-seconds:15}") long firstByteBudgetSeconds) {
+        // 首 token 超时必须比首字节总预算长：首字节前的失败要交给 FailoverClient 重试或切换
+        if (firstTokenSeconds <= firstByteBudgetSeconds) {
+            throw new IllegalStateException("gateway.timeouts.first-token-seconds (" + firstTokenSeconds
+                    + ") must be greater than gateway.failover.first-byte-budget-seconds (" + firstByteBudgetSeconds + ")");
+        }
         this.client = client;
         this.router = router;
         this.json = json;
         this.settler = settler;
         this.inputFactor = inputFactor;
+        this.firstTokenTimeout = Duration.ofSeconds(firstTokenSeconds);
     }
 
     @PostMapping("/v1/chat/completions")
@@ -48,7 +57,7 @@ public class ChatCompletionsController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only stream=true is supported");
         }
         Tenant tenant = exchange.getRequiredAttribute(Tenant.ATTR);
-        ProtocolAdapter adapter = router.route(request.model());
+        List<Candidate> candidateList= router.route(request.model());
         ChatRequest chatRequest = toChatRequest(request, tenant.defaultMaxTokens());
         int estimatedInput = QuotaSettler.estimateInput(chatRequest, inputFactor);
 
@@ -57,7 +66,7 @@ public class ChatCompletionsController {
             OpenAiChunkEncoder encoder = new OpenAiChunkEncoder(json, request.model(), request.includeUsage());
             //client.stream返回Flux<StreamEvent>, 通过encode 转换为Flux<String> 然后map成Flux<ServerSentEvent<String>>（加壳）
             return settler.meter(tenant, request.model(), estimatedInput, chatRequest.maxTokens(),
-                    () -> client.stream(adapter, chatRequest))
+                    ()-> FirstTokenTimeout.apply(client.streamWithFailover(candidateList, chatRequest), firstTokenTimeout))
                     .concatMapIterable(encoder::encode)
                     .map(data-> ServerSentEvent.<String>builder(data).build());
         })

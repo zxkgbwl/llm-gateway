@@ -1,0 +1,5 @@
+{
+  "model": "gemini-no-such-model",
+  "stream": true,
+  "max_tokens": 50,
+  "messages": [{"role": "user", "content": "hi"}]}
