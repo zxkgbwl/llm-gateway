@@ -84,6 +84,31 @@ public final class GeminiAdapter implements ProtocolAdapter {
         return new Translator();
     }
 
+    /**
+     * Gemini 的 Key 无效返回的是 400 INVALID_ARGUMENT（不是 401），只能靠 error.details[].reason 识别。
+     * 不覆盖的话会被当成 CLIENT_ERROR，不切换厂商，降级链路就断了。
+     */
+    @Override
+    public ErrorClass classify(UpstreamHttpException e) {
+        if (e.statusCode() == 400 && hasReason(e.body(), "API_KEY_INVALID")) {
+            return ErrorClass.PROVIDER_MISCONFIGURED;
+        }
+        return ProtocolAdapter.super.classify(e);
+    }
+
+    private static boolean hasReason(String body, String reason) {
+        try {
+            for (JsonNode detail : UpstreamJson.parse(body).path("error").path("details")) {
+                if (reason.equals(detail.path("reason").asText())) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // 错误体不是 JSON，按默认规则处理
+        }
+        return false;
+    }
+
     static final class Translator implements EventTranslator {
 
         @Override
