@@ -74,7 +74,7 @@ class FailoverClientTest {
             return behavior.apply(adapter.providerName());
         });
         //返回一个client
-        return new FailoverClient(upstream, new CooldownRegistry(clock, Duration.ofSeconds(30)), Duration.ofSeconds(15), clock);
+        return new FailoverClient(upstream, new CooldownRegistry(clock, Duration.ofSeconds(30)), Duration.ofSeconds(15), clock, Duration.ofSeconds(5));
     }
 
     private static UpstreamHttpException http(int status, String retryAfter) {

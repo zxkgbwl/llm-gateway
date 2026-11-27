@@ -101,7 +101,8 @@ public final class OpenAiAdapter implements ProtocolAdapter {
             if (usage.isObject()) {
                 events.add(new UsageUpdate(new Usage(
                         usage.path("prompt_tokens").asInt(),
-                        usage.path("completion_tokens").asInt())));
+                        usage.path("completion_tokens").asInt(),
+                        usage.path("prompt_tokens_details").path("cached_tokens").asInt())));
             }
             return events;
         }

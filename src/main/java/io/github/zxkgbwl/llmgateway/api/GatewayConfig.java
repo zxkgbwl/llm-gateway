@@ -2,13 +2,21 @@ package io.github.zxkgbwl.llmgateway.api;
 
 // import 按实际包路径调整
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.zxkgbwl.llmgateway.cost.PriceTable;
+import io.github.zxkgbwl.llmgateway.cost.PricingProperties;
+import io.github.zxkgbwl.llmgateway.events.KafkaSettlementPublisher;
+import io.github.zxkgbwl.llmgateway.events.SettlementListener;
+import io.github.zxkgbwl.llmgateway.metrics.StreamMetrics;
 import io.github.zxkgbwl.llmgateway.provider.*;
 import io.github.zxkgbwl.llmgateway.quota.QuotaSettler;
 import io.github.zxkgbwl.llmgateway.quota.RedisTpmLimiter;
 import io.github.zxkgbwl.llmgateway.quota.TpmLimiter;
 import io.github.zxkgbwl.llmgateway.sse.SseDecoder;
 import io.github.zxkgbwl.llmgateway.tenant.ApiKeyFilter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.netty.channel.ChannelOption;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -17,6 +25,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
@@ -35,7 +45,7 @@ import java.util.stream.Collectors;
  * 组件装配：所有依赖在构造时注入。API Key 从环境变量读取。
  */
 @Configuration
-@EnableConfigurationProperties({TenantProperties.class, ModelAliasProperties.class})
+@EnableConfigurationProperties({TenantProperties.class, ModelAliasProperties.class, PricingProperties.class})
 public class GatewayConfig {
     @Bean
     public TenantRegistry tenantRegistry(TenantProperties tenantProperties) {
@@ -53,10 +63,27 @@ public class GatewayConfig {
     }
 
     @Bean
-    public QuotaSettler quotaSettler(TpmLimiter limiter) {
-        return new QuotaSettler(limiter);
+    public PriceTable priceTable(PricingProperties props) {
+        return new PriceTable(props.pricing() == null ? List.of() : props.pricing());
     }
 
+    @Bean
+    public NewTopic settlementTopic(@Value("${gateway.events.settlement-topic}") String topic) {
+        // 启动时由 KafkaAdmin 自动创建；Kafka 不在时只记错误，不影响启动
+        return TopicBuilder.name(topic).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public SettlementListener settlementListener(KafkaTemplate<String, String> kafka, ObjectMapper json,
+                                                 @Value("${gateway.events.settlement-topic}") String topic) {
+        return new KafkaSettlementPublisher(kafka, json, topic);
+    }
+
+    @Bean
+    public QuotaSettler quotaSettler(TpmLimiter limiter, PriceTable prices, MeterRegistry registry,
+                                     SettlementListener listener) {
+        return new QuotaSettler(limiter, prices, registry, listener);
+    }
 
 
     @Bean
@@ -82,10 +109,12 @@ public class GatewayConfig {
     }
 
     @Bean
-    public FailoverClient failoverClient(StreamingClient streamingClient, CooldownRegistry cooldowns,
-                                         @Value("${gateway.failover.first-byte-budget-seconds:15}") long firstByteBudgetSeconds) {
+    public FailoverClient failoverClient(StreamingClient streamingClient,
+                                         CooldownRegistry cooldowns,
+                                         @Value("${gateway.failover.first-byte-budget-seconds:15}") long firstByteBudgetSeconds,
+                                         @Value("${gateway.failover.per-attempt-seconds:5}") long perAttemptSeconds) {
         return new FailoverClient(streamingClient::stream, cooldowns,
-                Duration.ofSeconds(firstByteBudgetSeconds), Clock.systemUTC());
+                Duration.ofSeconds(firstByteBudgetSeconds), Clock.systemUTC(), Duration.ofSeconds(perAttemptSeconds));
     }
 
 
@@ -114,5 +143,10 @@ public class GatewayConfig {
                 .collect(Collectors.toMap(ProtocolAdapter::providerName, Function.identity()));
 
         return new ProviderRouter(byPrefix, byProvider, modelProperties.models());
+    }
+
+    @Bean
+    public StreamMetrics streamMetrics(MeterRegistry registry) {
+        return new StreamMetrics(registry);
     }
 }

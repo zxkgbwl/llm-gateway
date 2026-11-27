@@ -1,6 +1,8 @@
 package io.github.zxkgbwl.llmgateway.provider;
 
 import io.github.zxkgbwl.llmgateway.common.ChatRequest;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -27,6 +29,7 @@ public class FailoverClient {
     private static final int MAX_TRIES_PER_CANDIDATE = 2;
 
 
+
     /**
      * 单次上游调用。生产环境传 StreamingClient::stream，测试里传假实现
      */
@@ -43,15 +46,44 @@ public class FailoverClient {
     private final CooldownRegistry cooldownRegistry;
     private final Duration firstByteBudget;
     private final Clock clock;
+    private final Duration perAttemptCap;
+    private final MeterRegistry registry;
 
-    public FailoverClient(Upstream upstream, CooldownRegistry cooldownRegistry, Duration firstByteBudget, Clock clock) {
+    public FailoverClient(Upstream upstream, CooldownRegistry cooldownRegistry, Duration firstByteBudget,
+                          Clock clock, Duration perAttemptCap) {
+        this(upstream, cooldownRegistry, firstByteBudget, clock, perAttemptCap, new SimpleMeterRegistry());
+    }
+
+    public FailoverClient(Upstream upstream, CooldownRegistry cooldownRegistry, Duration firstByteBudget,
+                          Clock clock, Duration perAttemptCap, MeterRegistry registry) {
         this.upstream = upstream;
         this.cooldownRegistry = cooldownRegistry;
         this.firstByteBudget = firstByteBudget;
         this.clock = clock;
+        this. perAttemptCap = perAttemptCap;
+        this.registry = registry;
     }
+
+    /**
+     * 每次尝试某个候选前回调。尝试是串行的，最后一次回调的就是实际服务的候选（全失败时是最后失败的那个）。
+     * 用回调而不是新的 StreamEvent：StreamEvent 是对外协议的来源，不混进内部元数据。
+     */
+    @FunctionalInterface
+    public interface AttemptListener {
+        void onAttempt(Candidate candidate);
+    }
+
+
+
+
     //输入llm的模型名称和用户请求，输出StreamEvent 流
     public Flux<StreamEvent> streamWithFailover(List<Candidate> candidateList, ChatRequest request) {
+        return streamWithFailover(candidateList, request, c -> {});
+
+    }
+
+    public Flux<StreamEvent> streamWithFailover(List<Candidate> candidateList, ChatRequest request,
+                                                AttemptListener listener) {
         return Flux.defer(() -> {
             List<Candidate> available = candidateList.stream()
                     .filter(c -> !cooldownRegistry.isCooling(c.key()))
@@ -64,7 +96,7 @@ public class FailoverClient {
                         "All upstream provider are rate limited", true, wait));
             }
             Instant deadline = clock.instant().plus(firstByteBudget);
-            return attempt(available, 0, 1, request, deadline, new ArrayList<>());
+            return attempt(available, 0, 1, request, deadline, new ArrayList<>(), listener);
         });
 
     }
@@ -81,13 +113,13 @@ public class FailoverClient {
      */
 
     private Flux<StreamEvent> attempt(List<Candidate> candidateList, int index, int tryNo,
-                                     ChatRequest request, Instant deadline, List<Failure> failures) {
+                                      ChatRequest request, Instant deadline, List<Failure> failures,
+                                      AttemptListener listener) {
         if (index >= candidateList.size()) {
             return Flux.error(exhausted(request, candidateList, failures));
         }
 
         Duration remaining = Duration.between(clock.instant(), deadline);
-
         if (remaining.isNegative() || remaining.isZero()) {
             failures.add(new Failure("-", ErrorClass.RETRYABLE,
                     "first-byte budget " + firstByteBudget.toSeconds() + "s exhausted"));
@@ -95,34 +127,42 @@ public class FailoverClient {
         }
 
         Candidate candidate = candidateList.get(index);
+        // 换到了新候选（不是第一个候选、也不是同候选重试）= 一次切换
+        if (index > 0 && tryNo == 1) {
+            registry.counter("gateway.failover.switches", "to", candidate.key()).increment();
+        }
+
         // 别名换成这个候选的真实模型名，其余字段不变
         ChatRequest actual = new ChatRequest(candidate.model(), request.messages(), request.maxTokens());
 
-        return upstream.executeStream(candidate.adapter(), actual, remaining)
+        // defer：在真正订阅（发起这次尝试）时才回调，计时点准确
+        return Flux.defer(() -> {
+                    listener.onAttempt(candidate);
+                    Duration perTry = remaining.compareTo(perAttemptCap) < 0 ? remaining : perAttemptCap;
+                    return upstream.executeStream(candidate.adapter(), actual, perTry);
+                })
                 .onErrorResume(e -> {
                     // 上游 HTTP 错误交给这个厂商的 adapter 分类（各家状态码不一致），其余异常按通用规则
                     ErrorClass cls = e instanceof UpstreamHttpException http
                             ? candidate.adapter().classify(http)
                             : ErrorClass.of(e);
-                    failures.add(new Failure(candidate.key(), cls ,summary(e)));
+                    registry.counter("gateway.upstream.errors",
+                            "provider", candidate.key(), "class", cls.name()).increment();
+                    failures.add(new Failure(candidate.key(), cls, summary(e)));
                     logFailure(request, candidate, tryNo, cls, e);
 
-                    return switch(cls) {
+                    return switch (cls) {
                         case RETRYABLE -> tryNo < MAX_TRIES_PER_CANDIDATE
-                                ? attempt(candidateList, index, tryNo + 1, request, deadline, failures)
-                                : attempt(candidateList, index+1, 1, request, deadline, failures);
-
+                                ? attempt(candidateList, index, tryNo + 1, request, deadline, failures, listener)
+                                : attempt(candidateList, index + 1, 1, request, deadline, failures, listener);
                         case RATE_LIMITED -> {
                             cooldownRegistry.markRateLimited(candidate.key(), ((UpstreamHttpException) e).retryAfter());
-                            yield attempt(candidateList, index+1, 1, request, deadline, failures);
+                            yield attempt(candidateList, index + 1, 1, request, deadline, failures, listener);
                         }
-
                         case PROVIDER_MISCONFIGURED ->
-                                attempt(candidateList, index+1, 1, request, deadline, failures);
-
+                                attempt(candidateList, index + 1, 1, request, deadline, failures, listener);
                         case CLIENT_ERROR, INTERNAL -> Flux.<StreamEvent>error(e);
                     };
-
                 });
     }
 
@@ -143,7 +183,7 @@ public class FailoverClient {
 
     private void logFailure(ChatRequest request, Candidate c, int tryNo, ErrorClass cls, Throwable t) {
         String body = t instanceof UpstreamHttpException h ? h.body() : null;
-        if (cls == ErrorClass.PROVIDER_MISCONFIGURED) {
+        if (cls == io.github.zxkgbwl.llmgateway.provider.ErrorClass.PROVIDER_MISCONFIGURED) {
             log.error("上游鉴权失败，检查 Key 配置：model={} candidate={} detail={} body={}",
                     request.model(), c.key(), summary(t), body);
         } else {

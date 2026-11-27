@@ -2,6 +2,6 @@
   "model": "flash",
   "stream": true,
   "stream_options": {"include_usage": true},
-  "max_tokens": 200,
-  "messages": [{"role": "user", "content": "Write a 100-word introduction to the printing press."}]
+  "max_tokens": 500,
+  "messages": [{"role": "user", "content": "Write a 500-word introduction to the printing press."}]
 }
