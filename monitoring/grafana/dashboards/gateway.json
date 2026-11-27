@@ -1,0 +1,69 @@
+{
+  "title": "LLM Gateway",
+  "uid": "llm-gateway",
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "timeseries", "title": "TTFT P50 / P95（客户端视角）",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le, model) (rate(gateway_ttft_seconds_bucket[5m])))", "legendFormat": "P50 {{model}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, model) (rate(gateway_ttft_seconds_bucket[5m])))", "legendFormat": "P95 {{model}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "上游 TTFT P95（按候选）",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(gateway_upstream_ttft_seconds_bucket[5m])))", "legendFormat": "{{provider}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "tok/s P50（按候选）",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le, provider) (rate(gateway_throughput_tokens_per_second_bucket[5m])))", "legendFormat": "{{provider}}" }
+      ]
+    },
+    {
+      "type": "bargauge", "title": "各租户成本（所选时间范围，USD）",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 6 } },
+      "targets": [
+        { "expr": "sum by (tenant) (increase(gateway_cost_usd_total[$__range]))", "legendFormat": "{{tenant}}", "instant": true }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "上游错误（按分类）",
+      "gridPos": { "x": 0, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "targets": [
+        { "expr": "sum by (class, provider) (increase(gateway_upstream_errors_total[5m]))", "legendFormat": "{{class}} {{provider}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "切换次数",
+      "gridPos": { "x": 8, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "targets": [
+        { "expr": "sum by (to) (increase(gateway_failover_switches_total[5m]))", "legendFormat": "→ {{to}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "请求结果",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+      "datasource": { "uid": "prom" },
+      "targets": [
+        { "expr": "sum by (outcome) (increase(gateway_requests_total[5m]))", "legendFormat": "{{outcome}}" }
+      ]
+    }
+  ]
+}

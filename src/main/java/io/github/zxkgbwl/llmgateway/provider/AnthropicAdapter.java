@@ -83,6 +83,8 @@ public final class AnthropicAdapter implements ProtocolAdapter {
 
         private int inputTokens;
         private int outputTokens;
+        private int cacheReadTokens;
+        private int cacheWriteTokens;
         private String rawStopReason;
 
         @Override
@@ -95,6 +97,8 @@ public final class AnthropicAdapter implements ProtocolAdapter {
                     JsonNode usage = node.path("message").path("usage");
                     inputTokens = usage.path("input_tokens").asInt();
                     outputTokens = usage.path("output_tokens").asInt();
+                    cacheReadTokens = usage.path("cache_read_input_tokens").asInt();
+                    cacheWriteTokens = usage.path("cache_creation_input_tokens").asInt();
                     yield List.of(usageSnapshot());
                 }
                 case "content_block_delta" -> {
@@ -123,7 +127,8 @@ public final class AnthropicAdapter implements ProtocolAdapter {
         }
 
         private UsageUpdate usageSnapshot() {
-            return new UsageUpdate(new Usage(inputTokens, outputTokens));
+            // Anthropic 的 input_tokens 不含缓存部分，加回去，和其他厂商语义一致
+            return new UsageUpdate(new Usage(inputTokens + cacheReadTokens + cacheWriteTokens, outputTokens, cacheReadTokens));
         }
 
         private static FinishReason mapStopReason(String raw) {

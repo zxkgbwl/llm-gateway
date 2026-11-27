@@ -5,6 +5,8 @@ server:
 logging:
   level:
     reactor.netty.http.client: info
+    org.springframework.kafka.support.LoggingProducerListener: off   # 和我们自己的 WARN 重复
+    org.apache.kafka.clients.NetworkClient: error                    # Kafka 不在时每秒刷重连日志
   file:
     name: logs/gateway.log
 spring:
@@ -12,6 +14,16 @@ spring:
     redis:
       host: localhost
       port: 6379
+      timeout: 500ms
+      connect-timeout: 500ms
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      properties:
+        max.block.ms: 1000           # 拿不到元数据 / 缓冲区满时最多阻塞 1 秒（默认 60 秒）
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000    # 必须 >= request.timeout.ms + linger.ms
 
 
 
@@ -27,6 +39,7 @@ gateway:
   failover:
     first-byte-budget-seconds: 15      # 首字节前总预算，重试和切换共用
     default-cooldown-seconds: 30       # 上游 429 没带 Retry-After 时的冷却时长
+    per-attempt-seconds: 5
 
   timeouts:
     connect-ms: 3000                   # TCP 建连超时
@@ -47,3 +60,28 @@ gateway:
 
   ollama:
     base-url: http://localhost:11434/v1
+  pricing:
+    - provider: gemini
+      model: gemini-3.1-flash-lite
+      input-per-mtok: 0.10
+      output-per-mtok: 0.40
+      cache-read-per-mtok: 0.025
+    - provider: anthropic
+      model: claude-haiku-5-5
+      input-per-mtok: 1.00
+      output-per-mtok: 5.00
+      cache-read-per-mtok: 0.10
+    - provider: ollama           # 本地模型，价格为 0
+      model: qwen2.5:0.5b
+      input-per-mtok: 0
+      output-per-mtok: 0
+
+  events:
+    settlement-topic: gateway.settlements
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+

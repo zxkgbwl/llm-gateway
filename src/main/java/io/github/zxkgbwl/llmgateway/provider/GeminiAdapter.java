@@ -132,7 +132,8 @@ public final class GeminiAdapter implements ProtocolAdapter {
             JsonNode usage = chunk.path("usageMetadata");
             if (usage.isObject()) {
                 int output = usage.path("candidatesTokenCount").asInt() + usage.path("thoughtsTokenCount").asInt();
-                events.add(new UsageUpdate(new Usage(usage.path("promptTokenCount").asInt(), output)));
+                events.add(new UsageUpdate(new Usage(usage.path("promptTokenCount").asInt(), output,
+                        usage.path("cachedContentTokenCount").asInt())));
             }
 
             String blockReason = chunk.path("promptFeedback").path("blockReason").asText("");
